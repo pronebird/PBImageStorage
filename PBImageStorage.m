@@ -120,8 +120,10 @@
 	}
 	
 	// dump image to disk on background queue
+	__weak id weakSelf = self;
 	[_ioQueue addOperationWithBlock:^{
-		[self _setImage:image forKey:key diskOnly:diskOnly completion:completion];
+		__strong id strongSelf = weakSelf;
+		[strongSelf _setImage:image forKey:key diskOnly:diskOnly completion:completion];
 	}];
 }
 
@@ -142,8 +144,10 @@
 }
 
 - (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
+	__weak id weakSelf = self;
 	[_ioQueue addOperationWithBlock:^{
-		UIImage* image = [self _imageForKey:key];
+		__strong id strongSelf = weakSelf;
+		UIImage* image = [strongSelf _imageForKey:key];
 		
 		if(completion != nil) {
 			completion(image);
@@ -161,8 +165,11 @@
 	NSParameterAssert(key != nil);
 	
 	[_cache removeObjectForKey:key];
+	
+	__weak typeof(self) weakSelf = self;
 	[_ioQueue addOperationWithBlock:^{
-		[_fileManager removeItemAtPath:[self _pathForKey:key] error:nil];
+		__strong typeof(self) strongSelf = weakSelf;
+		[strongSelf->_fileManager removeItemAtPath:[strongSelf _pathForKey:key] error:nil];
 	}];
 }
 
