@@ -39,8 +39,7 @@
 }
 
 - (id)initWithNamespace:(NSString*)name basePath:(NSString*)basePath {
-	NSParameterAssert(name != nil);
-	NSParameterAssert(basePath != nil);
+	NSParameterAssert(name != nil && basePath != nil);
 	
 	if(self = [super init]) {
 		NSInteger maxConcurrentOperations = NSProcessInfo.processInfo.processorCount * 2;
@@ -86,7 +85,7 @@
 }
 
 - (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void(^)(void))completion {
-	NSParameterAssert(image != nil);
+	NSParameterAssert(key != nil && image != nil);
 	
 	NSData* data = UIImageJPEGRepresentation(image, 1.0f);
 	NSString* path = [self _pathForKey:key];
@@ -113,6 +112,8 @@
 }
 
 - (void)setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion {
+	NSParameterAssert(key != nil && image != nil);
+	
 	// save image to memory
 	if(!diskOnly) {
 		[_cache setObject:image forKey:key];
@@ -125,6 +126,8 @@
 }
 
 - (UIImage*)_imageForKey:(NSString*)key {
+	NSParameterAssert(key != nil);
+	
 	UIImage* image = [_cache objectForKey:key];
 	
 	if(image == nil) {
@@ -149,16 +152,17 @@
 }
 
 - (UIImage*)imageFromMemoryForKey:(NSString*)key {
-	UIImage* image = [_cache objectForKey:key];
-	return image;
+	NSParameterAssert(key != nil);
+	
+	return [_cache objectForKey:key];
 }
 
 - (void)removeImageForKey:(NSString*)key {
-	NSString* path = [self _pathForKey:key];
+	NSParameterAssert(key != nil);
 	
 	[_cache removeObjectForKey:key];
 	[_ioQueue addOperationWithBlock:^{
-		[_fileManager removeItemAtPath:path error:nil];
+		[_fileManager removeItemAtPath:[self _pathForKey:key] error:nil];
 	}];
 }
 
