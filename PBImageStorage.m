@@ -178,8 +178,15 @@
 }
 
 - (void)clear {
-	[self clearMemory];
-	[_fileManager removeItemAtPath:_storagePath error:nil];
+	__weak typeof(self) weakSelf = self;
+	
+	[_ioQueue cancelAllOperations];
+	[_ioQueue addOperationWithBlock:^{
+		__strong typeof(self) strongSelf = weakSelf;
+		
+		[strongSelf->_fileManager removeItemAtPath:strongSelf->_storagePath error:nil];
+		[strongSelf clearMemory];
+	}];
 
 	_checkStoragePathExists = YES;
 }
