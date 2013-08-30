@@ -67,8 +67,6 @@
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidEnterBackgroundNotification object:nil];
 #endif
-	
-	NSLog(@"PBImageStorage::dealloc");
 }
 
 // Clear memory cache when app enters background
@@ -96,6 +94,11 @@
 			if(!diskOnly) {
 				[_cache removeObjectForKey:key];
 			}
+			
+			if(completion != nil) {
+				completion();
+			}
+			
 			return;
 		}
 		
@@ -107,11 +110,11 @@
 
 - (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
 	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
-		if(currentOperation.isCancelled) {
-			return;
-		}
+		UIImage* image = nil;
 		
-		UIImage* image = [self _imageForKey:key];
+		if(!currentOperation.isCancelled) {
+			image = [self _imageForKey:key];
+		}
 		
 		if(completion != nil) {
 			completion(image);
