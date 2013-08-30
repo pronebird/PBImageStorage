@@ -79,12 +79,107 @@
 	[self clearMemory];
 }
 
+- (void)setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion {
+	NSParameterAssert(key != nil && image != nil);
+	
+	// save image to memory
+	if(!diskOnly) {
+		[_cache setObject:image forKey:key];
+	}
+	
+	// dump image to disk on background queue
+	__weak typeof(self) weakSelf = self;
+	__block NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
+		__strong typeof(self) strongSelf = weakSelf;
+		
+		if(operation.isCancelled) {
+			// remove object from cache if operation was cancelled
+			if(!diskOnly) {
+				[strongSelf->_cache removeObjectForKey:key];
+			}
+			return;
+		}
+		
+		[strongSelf _setImage:image forKey:key completion:completion];
+	}];
+	
+	[_ioQueue addOperation:operation];
+}
+
+- (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
+	__weak id weakSelf = self;
+	__block NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
+		__strong id strongSelf = weakSelf;
+		
+		if(operation.isCancelled) {
+			return;
+		}
+		
+		UIImage* image = [strongSelf _imageForKey:key];
+		
+		if(completion != nil) {
+			completion(image);
+		}
+	}];
+	
+	[_ioQueue addOperation:operation];
+}
+
+- (UIImage*)imageFromMemoryForKey:(NSString*)key {
+	NSParameterAssert(key != nil);
+	
+	return [_cache objectForKey:key];
+}
+
+- (void)removeImageForKey:(NSString*)key {
+	NSParameterAssert(key != nil);
+	
+	[_cache removeObjectForKey:key];
+	
+	__weak typeof(self) weakSelf = self;
+	__block NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
+		__strong typeof(self) strongSelf = weakSelf;
+		
+		if(operation.isCancelled) {
+			return;
+		}
+		
+		[strongSelf->_fileManager removeItemAtPath:[strongSelf _pathForKey:key] error:nil];
+	}];
+	
+	[_ioQueue addOperation:operation];
+}
+
+- (void)clearMemory {
+	[_cache removeAllObjects];
+}
+
+- (void)clear {
+	__weak typeof(self) weakSelf = self;
+	
+	[_ioQueue cancelAllOperations];
+	__block NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
+		__strong typeof(self) strongSelf = weakSelf;
+		
+		if(operation.isCancelled) {
+			return;
+		}
+		
+		[strongSelf->_fileManager removeItemAtPath:strongSelf->_storagePath error:nil];
+		strongSelf->_checkStoragePathExists = YES;
+		
+		[strongSelf clearMemory];
+
+	}];
+	[_ioQueue addOperation:operation];
+}
+
 - (NSString*)_pathForKey:(NSString*)key {
 	NSString* scale = UIScreen.mainScreen.scale == 2 ? @"@2x" : @"";
 	return [_storagePath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@.jpg", key, scale]];
 }
 
-- (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void(^)(void))completion {
+- (void)_setImage:(UIImage*)image forKey:(NSString*)key completion:(void(^)(void))completion {
 	NSParameterAssert(key != nil && image != nil);
 	
 	NSData* data = UIImageJPEGRepresentation(image, 1.0f);
@@ -111,22 +206,6 @@
 	}
 }
 
-- (void)setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion {
-	NSParameterAssert(key != nil && image != nil);
-	
-	// save image to memory
-	if(!diskOnly) {
-		[_cache setObject:image forKey:key];
-	}
-	
-	// dump image to disk on background queue
-	__weak id weakSelf = self;
-	[_ioQueue addOperationWithBlock:^{
-		__strong id strongSelf = weakSelf;
-		[strongSelf _setImage:image forKey:key diskOnly:diskOnly completion:completion];
-	}];
-}
-
 - (UIImage*)_imageForKey:(NSString*)key {
 	NSParameterAssert(key != nil);
 	
@@ -141,54 +220,6 @@
 	}
 	
 	return image;
-}
-
-- (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
-	__weak id weakSelf = self;
-	[_ioQueue addOperationWithBlock:^{
-		__strong id strongSelf = weakSelf;
-		UIImage* image = [strongSelf _imageForKey:key];
-		
-		if(completion != nil) {
-			completion(image);
-		}
-	}];
-}
-
-- (UIImage*)imageFromMemoryForKey:(NSString*)key {
-	NSParameterAssert(key != nil);
-	
-	return [_cache objectForKey:key];
-}
-
-- (void)removeImageForKey:(NSString*)key {
-	NSParameterAssert(key != nil);
-	
-	[_cache removeObjectForKey:key];
-	
-	__weak typeof(self) weakSelf = self;
-	[_ioQueue addOperationWithBlock:^{
-		__strong typeof(self) strongSelf = weakSelf;
-		[strongSelf->_fileManager removeItemAtPath:[strongSelf _pathForKey:key] error:nil];
-	}];
-}
-
-- (void)clearMemory {
-	[_cache removeAllObjects];
-}
-
-- (void)clear {
-	__weak typeof(self) weakSelf = self;
-	
-	[_ioQueue cancelAllOperations];
-	[_ioQueue addOperationWithBlock:^{
-		__strong typeof(self) strongSelf = weakSelf;
-		
-		[strongSelf->_fileManager removeItemAtPath:strongSelf->_storagePath error:nil];
-		strongSelf->_checkStoragePathExists = YES;
-		
-		[strongSelf clearMemory];
-	}];
 }
 
 @end
