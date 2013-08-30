@@ -67,8 +67,6 @@
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidEnterBackgroundNotification object:nil];
 #endif
-	
-	NSLog(@"PBImageStorage::dealloc");
 }
 
 // Clear memory cache when app enters background
