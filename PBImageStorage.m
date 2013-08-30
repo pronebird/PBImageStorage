@@ -199,9 +199,31 @@
 		_checkStoragePathExists = NO;
 	}
 	
-	if(![data writeToFile:path options:NSDataWritingAtomic error:&error]) {
-		[[NSException exceptionWithName:@"IOException" reason:error.localizedFailureReason userInfo:error.userInfo] raise];
-	}
+	// make sure file exists
+	[_fileManager createFileAtPath:path contents:nil attributes:nil];
+	
+	// open handle
+	NSFileHandle* handle = [NSFileHandle fileHandleForWritingAtPath:path];
+	
+	// lock file
+	struct flock lock;
+	
+	lock.l_type = O_RDWR;
+	lock.l_start = 0;
+	lock.l_whence = SEEK_SET;
+	lock.l_len = 0;
+	lock.l_pid = getpid();
+	
+	int ret = fcntl(handle.fileDescriptor, F_SETLKW, &lock);
+	//NSLog(@"-> fcntl: %d", ret);
+	
+	// write data
+	[handle writeData:data];
+	
+	// unlock file
+	lock.l_type = F_UNLCK;
+	ret = fcntl(handle.fileDescriptor, F_SETLK, &lock);
+	//NSLog(@"<- fcntl: %d", ret);
 	
 	if(completion != nil) {
 		completion();
@@ -214,7 +236,30 @@
 	UIImage* image = [_cache objectForKey:key];
 	
 	if(image == nil) {
-		image = [UIImage imageWithContentsOfFile:[self _pathForKey:key]];
+		NSFileHandle* handle = [NSFileHandle fileHandleForReadingAtPath:[self _pathForKey:key]];
+		
+		if(handle != nil) {
+			// lock file
+			struct flock lock;
+			
+			lock.l_type = O_RDWR;
+			lock.l_start = 0;
+			lock.l_whence = SEEK_SET;
+			lock.l_len = 0;
+			lock.l_pid = getpid();
+			
+			int ret = fcntl(handle.fileDescriptor, F_SETLKW, &lock);
+			//NSLog(@"-> fcntl: %d", ret);
+			
+			// read image
+			NSData* data = [handle readDataToEndOfFile];
+			image = [UIImage imageWithData:data];
+			
+			// unlock file
+			lock.l_type = F_UNLCK;
+			ret = fcntl(handle.fileDescriptor, F_SETLK, &lock);
+			//NSLog(@"<- fcntl: %d", ret);
+		}
 		
 		if(image != nil) {
 			[_cache setObject:image forKey:key];
