@@ -185,10 +185,10 @@
 		__strong typeof(self) strongSelf = weakSelf;
 		
 		[strongSelf->_fileManager removeItemAtPath:strongSelf->_storagePath error:nil];
+		strongSelf->_checkStoragePathExists = YES;
+		
 		[strongSelf clearMemory];
 	}];
-
-	_checkStoragePathExists = YES;
 }
 
 @end
