@@ -253,7 +253,7 @@
 			
 			// read image
 			NSData* data = [handle readDataToEndOfFile];
-			image = [UIImage imageWithData:data];
+			image = [UIImage imageWithData:data scale:UIScreen.mainScreen.scale];
 			
 			// unlock file
 			lock.l_type = F_UNLCK;
