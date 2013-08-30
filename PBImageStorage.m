@@ -67,6 +67,8 @@
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidEnterBackgroundNotification object:nil];
 #endif
+	
+	NSLog(@"PBImageStorage::dealloc");
 }
 
 // Clear memory cache when app enters background
@@ -88,34 +90,28 @@
 	}
 	
 	// dump image to disk on background queue
-	__weak typeof(self) weakSelf = self;
-	__block NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
-		__strong typeof(self) strongSelf = weakSelf;
-		
-		if(operation.isCancelled) {
+	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		if(currentOperation.isCancelled) {
 			// remove object from cache if operation was cancelled
 			if(!diskOnly) {
-				[strongSelf->_cache removeObjectForKey:key];
+				[_cache removeObjectForKey:key];
 			}
 			return;
 		}
 		
-		[strongSelf _setImage:image forKey:key completion:completion];
+		[self _setImage:image forKey:key completion:completion];
 	}];
 	
 	[_ioQueue addOperation:operation];
 }
 
 - (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
-	__weak id weakSelf = self;
-	__block NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
-		__strong id strongSelf = weakSelf;
-		
-		if(operation.isCancelled) {
+	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		if(currentOperation.isCancelled) {
 			return;
 		}
 		
-		UIImage* image = [strongSelf _imageForKey:key];
+		UIImage* image = [self _imageForKey:key];
 		
 		if(completion != nil) {
 			completion(image);
@@ -134,19 +130,15 @@
 - (void)removeImageForKey:(NSString*)key {
 	NSParameterAssert(key != nil);
 	
-	[_cache removeObjectForKey:key];
-	
-	__weak typeof(self) weakSelf = self;
-	__block NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
-		__strong typeof(self) strongSelf = weakSelf;
-		
-		if(operation.isCancelled) {
+	NSBlockOperation *operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		if(currentOperation.isCancelled) {
 			return;
 		}
 		
-		[strongSelf->_fileManager removeItemAtPath:[strongSelf _pathForKey:key] error:nil];
+		[_fileManager removeItemAtPath:[self _pathForKey:key] error:nil];
 	}];
 	
+	[_cache removeObjectForKey:key];
 	[_ioQueue addOperation:operation];
 }
 
@@ -155,23 +147,30 @@
 }
 
 - (void)clear {
-	__weak typeof(self) weakSelf = self;
-	
-	[_ioQueue cancelAllOperations];
-	__block NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
-		__strong typeof(self) strongSelf = weakSelf;
-		
-		if(operation.isCancelled) {
+	NSBlockOperation *operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		if(currentOperation.isCancelled) {
 			return;
 		}
 		
-		[strongSelf->_fileManager removeItemAtPath:strongSelf->_storagePath error:nil];
-		strongSelf->_checkStoragePathExists = YES;
+		[_fileManager removeItemAtPath:_storagePath error:nil];
+		_checkStoragePathExists = YES;
 		
-		[strongSelf clearMemory];
-
+		[self clearMemory];
 	}];
+
+	[_ioQueue cancelAllOperations];
 	[_ioQueue addOperation:operation];
+}
+
+- (NSBlockOperation*)_operationWithBlock:(void(^)(NSBlockOperation* currentOperation))block {
+	NSBlockOperation *operation = [[NSBlockOperation alloc] init];
+	__weak NSBlockOperation *weakOperation = operation;
+	
+	[operation addExecutionBlock:^{
+		block(weakOperation);
+	}];
+	
+	return operation;
 }
 
 - (NSString*)_pathForKey:(NSString*)key {
