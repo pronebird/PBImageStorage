@@ -215,7 +215,7 @@
 	
 	// check if handle is valid
 	if(handle == nil) {
-		[[NSException exceptionWithName:@"IOException" reason:@"Invalid file handle: %@" userInfo:nil] raise];
+		[[NSException exceptionWithName:@"IOException" reason:[NSString stringWithFormat:@"Invalid file handle: %@", path] userInfo:nil] raise];
 	}
 	
 	// lock file
