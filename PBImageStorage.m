@@ -14,13 +14,6 @@
 
 #import "PBImageStorage.h"
 
-@interface PBImageStorage()
-
-@property (strong, readwrite) NSString* namespaceName;
-@property (strong, readwrite) NSString* storagePath;
-
-@end
-
 @implementation PBImageStorage {
 	NSCache* _cache;
 	NSFileManager* _fileManager;
@@ -181,6 +174,21 @@
 	return [_storagePath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@.jpg", key, scale]];
 }
 
+- (void)_lockFileHandle:(NSFileHandle*)handle {
+	struct flock lock = { 0, 0, getpid(), F_WRLCK, SEEK_SET };
+	
+	if(fcntl(handle.fileDescriptor, F_SETLKW, &lock) == -1) {
+		NSLog(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
+	}
+}
+
+- (void)_unlockFileHandle:(NSFileHandle*)handle {
+	struct flock lock = { 0, 0, getpid(), F_UNLCK, SEEK_SET };
+	if(fcntl(handle.fileDescriptor, F_SETLK, &lock) == -1) {
+		NSLog(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
+	}
+}
+
 - (void)_setImage:(UIImage*)image forKey:(NSString*)key completion:(void(^)(void))completion {
 	NSParameterAssert(key != nil && image != nil);
 	
@@ -203,27 +211,21 @@
 	[_fileManager createFileAtPath:path contents:nil attributes:nil];
 	
 	// open handle
-	NSFileHandle* handle = [NSFileHandle fileHandleForWritingAtPath:path];
+	NSFileHandle* handle = [NSFileHandle fileHandleForUpdatingAtPath:path];
+	
+	// check if handle is valid
+	if(handle == nil) {
+		[[NSException exceptionWithName:@"IOException" reason:@"Invalid file handle: %@" userInfo:nil] raise];
+	}
 	
 	// lock file
-	struct flock lock;
-	
-	lock.l_type = O_RDWR;
-	lock.l_start = 0;
-	lock.l_whence = SEEK_SET;
-	lock.l_len = 0;
-	lock.l_pid = getpid();
-	
-	int ret = fcntl(handle.fileDescriptor, F_SETLKW, &lock);
-	//NSLog(@"-> fcntl: %d", ret);
+	[self _lockFileHandle:handle];
 	
 	// write data
 	[handle writeData:data];
 	
 	// unlock file
-	lock.l_type = F_UNLCK;
-	ret = fcntl(handle.fileDescriptor, F_SETLK, &lock);
-	//NSLog(@"<- fcntl: %d", ret);
+	[self _unlockFileHandle:handle];
 	
 	if(completion != nil) {
 		completion();
@@ -236,29 +238,18 @@
 	UIImage* image = [_cache objectForKey:key];
 	
 	if(image == nil) {
-		NSFileHandle* handle = [NSFileHandle fileHandleForReadingAtPath:[self _pathForKey:key]];
+		NSFileHandle* handle = [NSFileHandle fileHandleForUpdatingAtPath:[self _pathForKey:key]];
 		
 		if(handle != nil) {
 			// lock file
-			struct flock lock;
-			
-			lock.l_type = O_RDWR;
-			lock.l_start = 0;
-			lock.l_whence = SEEK_SET;
-			lock.l_len = 0;
-			lock.l_pid = getpid();
-			
-			int ret = fcntl(handle.fileDescriptor, F_SETLKW, &lock);
-			//NSLog(@"-> fcntl: %d", ret);
+			[self _lockFileHandle:handle];
 			
 			// read image
 			NSData* data = [handle readDataToEndOfFile];
 			image = [UIImage imageWithData:data scale:UIScreen.mainScreen.scale];
 			
 			// unlock file
-			lock.l_type = F_UNLCK;
-			ret = fcntl(handle.fileDescriptor, F_SETLK, &lock);
-			//NSLog(@"<- fcntl: %d", ret);
+			[self _unlockFileHandle:handle];
 		}
 		
 		if(image != nil) {
