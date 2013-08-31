@@ -14,13 +14,6 @@
 
 #import "PBImageStorage.h"
 
-@interface PBImageStorage()
-
-@property (strong, readwrite) NSString* namespaceName;
-@property (strong, readwrite) NSString* storagePath;
-
-@end
-
 @implementation PBImageStorage {
 	NSCache* _cache;
 	NSFileManager* _fileManager;
