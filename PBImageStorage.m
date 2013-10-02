@@ -142,7 +142,7 @@
 	[_cache removeAllObjects];
 }
 
-- (void)clear {
+- (void)clearWithCompletion:(void(^)(void))completion {
 	NSBlockOperation *operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
 		if(currentOperation.isCancelled) {
 			return;
@@ -152,6 +152,10 @@
 		_checkStoragePathExists = YES;
 		
 		[self clearMemory];
+		
+		if(completion != nil) {
+			completion();
+		}
 	}];
 
 	[_ioQueue cancelAllOperations];

@@ -65,6 +65,6 @@
 //
 // Removes all objects from disk and memory
 //
-- (void)clear;
+- (void)clearWithCompletion:(void(^)(void))completion;
 
 @end
