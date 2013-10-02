@@ -179,7 +179,13 @@
 }
 
 - (void)_lockFileHandle:(NSFileHandle*)handle {
-	struct flock lock = { 0, 0, getpid(), F_WRLCK, SEEK_SET };
+	struct flock lock;
+	
+	lock.l_start = 0;
+	lock.l_len = 0;
+	lock.l_pid = getpid();
+	lock.l_type = F_WRLCK;
+	lock.l_whence = SEEK_SET;
 	
 	if(fcntl(handle.fileDescriptor, F_SETLKW, &lock) == -1) {
 		NSLog(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
@@ -187,7 +193,14 @@
 }
 
 - (void)_unlockFileHandle:(NSFileHandle*)handle {
-	struct flock lock = { 0, 0, getpid(), F_UNLCK, SEEK_SET };
+	struct flock lock;
+	
+	lock.l_start = 0;
+	lock.l_len = 0;
+	lock.l_pid = getpid();
+	lock.l_type = F_UNLCK;
+	lock.l_whence = SEEK_SET;
+	
 	if(fcntl(handle.fileDescriptor, F_SETLK, &lock) == -1) {
 		NSLog(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
 	}
