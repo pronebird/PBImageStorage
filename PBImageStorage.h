@@ -36,14 +36,14 @@
 
 //
 // Save image to disk only, or to memory and disk
-// Completion handler is called on background io thread.
+// Completion handler is called on main thread.
 //
 - (void)setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void(^)(void))completion;
 
 //
 // Retrieve image from memory if available, otherwise load it from
 // disk to memory and return it in completion handler
-// Completion handler is called on background io thread.
+// Completion handler is called on main thread.
 //
 - (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion;
 

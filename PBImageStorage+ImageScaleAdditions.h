@@ -11,6 +11,7 @@
 
 //
 // Scales original image at key, puts it in storage and returns it in completion handler
+// Completion handler is called on main thread.
 //
 - (void)imageForKey:(NSString*)key scaledToFit:(CGSize)size completion:(void(^)(BOOL cached, UIImage* image))completion;
 

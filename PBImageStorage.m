@@ -89,13 +89,17 @@
 			}
 			
 			if(completion != nil) {
-				completion();
+				dispatch_async(dispatch_get_main_queue(), completion);
 			}
 			
 			return;
 		}
 		
-		[self _setImage:image forKey:key completion:completion];
+		[self _setImage:image forKey:key completion:^{
+			if(completion != nil) {
+				dispatch_async(dispatch_get_main_queue(), completion);
+			}
+		}];
 	}];
 	
 	[_ioQueue addOperation:operation];
@@ -110,7 +114,9 @@
 		}
 		
 		if(completion != nil) {
-			completion(image);
+			dispatch_async(dispatch_get_main_queue(), ^{
+				completion(image);
+			});
 		}
 	}];
 	
@@ -154,7 +160,7 @@
 		[self clearMemory];
 		
 		if(completion != nil) {
-			completion();
+			dispatch_async(dispatch_get_main_queue(), completion);
 		}
 	}];
 

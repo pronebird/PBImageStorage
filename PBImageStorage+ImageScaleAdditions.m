@@ -53,67 +53,60 @@
 // Scales original image at key, puts it in storage and returns in completion handler
 //
 - (void)imageForKey:(NSString*)key scaledToFit:(CGSize)size completion:(void(^)(BOOL cached, UIImage* image))completion {
-	NSString* cachedImageKey = [self _keyForScaledImageWithKey:key size:size];
+	NSString* scaledImageKey = [self _keyForScaledImageWithKey:key size:size];
 	
-	// get scaled image from memory
-	__block UIImage* cachedImage = [self imageFromMemoryForKey:cachedImageKey];
+	// try getting scaled image from memory
+	UIImage* memoryImage = [self imageFromMemoryForKey:scaledImageKey];
 	
-	// if it's not there, try loading from disk
-	if(cachedImage == nil) {
-		NSString* scaledImageKey = [self _keyForScaledImageWithKey:key size:size];
+	// return if image is found in memory cache
+	if(memoryImage != nil) {
+		if(completion != nil) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				completion(YES, memoryImage);
+			});
+		}
+		return;
+	}
+	
+	// if it's not in memory, try loading it from disk
+	[self imageForKey:scaledImageKey completion:^(UIImage *diskImage) {
 		
-		// query scaled image from disk
-		[self imageForKey:scaledImageKey completion:^(UIImage *resizedImage) {
+		// return image if it's found on disk
+		if(diskImage != nil) {
+			if(completion != nil) {
+				dispatch_async(dispatch_get_main_queue(), ^{
+					completion(NO, diskImage);
+				});
+			}
+			return;
+		}
+		
+		// retrieve original image to generate a scaled image
+		[self imageForKey:key completion:^(UIImage *originalImage) {
 			
-			if(resizedImage != nil) {
+			// if original image lost or something really went wrong, return nil
+			if(originalImage == nil) {
 				if(completion != nil) {
-					dispatch_async(dispatch_get_main_queue(), ^{
-						completion(NO, resizedImage);
-					});
+					completion(NO, nil);
 				}
 				return;
 			}
 			
-			// query original image from disk
-			[self imageForKey:key completion:^(UIImage *originalImage) {
+			// schedule scaling in background
+			dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 				
-				// if image lost or something really went wrong
-				// bail out and return nil
-				if(originalImage == nil) {
+				// scale image
+				UIImage* scaledImage = [self _scaleImage:originalImage toSize:size];
+				
+				// save scaled image on disk and in memory
+				[self setImage:scaledImage forKey:scaledImageKey diskOnly:NO completion:^{
 					if(completion != nil) {
-						dispatch_async(dispatch_get_main_queue(), ^{
-							completion(NO, nil);
-						});
+						completion(NO, scaledImage);
 					}
-					return;
-				}
-				
-				// dispatch image scaling on some other queue
-				// since completion handler is invoked on background ioQueue
-				dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-					// scale image
-					cachedImage = [self _scaleImage:originalImage toSize:size];
-					
-					// set image asynchronously
-					[self setImage:cachedImage forKey:cachedImageKey diskOnly:NO completion:^{
-						// call completion handler on main thread and pass scaled image there
-						if(completion != nil) {
-							dispatch_async(dispatch_get_main_queue(), ^{
-								completion(NO, cachedImage);
-							});
-						}
-					}];
-				});
-			}];
-		}];
-	} else {
-		// call completion handler on main thread and pass cached image there
-		if(completion != nil) {
-			dispatch_async(dispatch_get_main_queue(), ^{
-				completion(YES, cachedImage);
+				}];
 			});
-		}
-	}
+		}];
+	}];
 }
 
 @end
