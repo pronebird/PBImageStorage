@@ -2,7 +2,7 @@
 //  PBImageStorage+ImageScaleAdditions.h
 //
 //  Created by pronebird on 10/11/13.
-//  Copyright (c) 2013 pronebird. All rights reserved.
+//  Copyright (c) 2013 Andrej Mihajlov. All rights reserved.
 //
 
 #import "PBImageStorage.h"

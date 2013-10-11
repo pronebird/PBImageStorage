@@ -2,7 +2,7 @@
 //  PBImageStorage+ImageScaleAdditions.m
 //
 //  Created by pronebird on 10/11/13.
-//  Copyright (c) 2013 pronebird. All rights reserved.
+//  Copyright (c) 2013 Andrej Mihajlov. All rights reserved.
 //
 
 #import "PBImageStorage+ImageScaleAdditions.h"
@@ -61,6 +61,7 @@
 	// return if image is found in memory cache
 	if(memoryImage != nil) {
 		if(completion != nil) {
+			// no guarantee that this method is called on main thread
 			dispatch_async(dispatch_get_main_queue(), ^{
 				completion(YES, memoryImage);
 			});
@@ -68,20 +69,18 @@
 		return;
 	}
 	
-	// if it's not in memory, try loading it from disk
+	// if image is not in memory, try loading it from disk
 	[self imageForKey:scaledImageKey completion:^(UIImage *diskImage) {
 		
 		// return image if it's found on disk
 		if(diskImage != nil) {
 			if(completion != nil) {
-				dispatch_async(dispatch_get_main_queue(), ^{
-					completion(NO, diskImage);
-				});
+				completion(NO, diskImage);
 			}
 			return;
 		}
 		
-		// retrieve original image to generate a scaled image
+		// retrieve original image to generate a scaled copy
 		[self imageForKey:key completion:^(UIImage *originalImage) {
 			
 			// if original image lost or something really went wrong, return nil
