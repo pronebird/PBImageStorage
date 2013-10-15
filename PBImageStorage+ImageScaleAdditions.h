@@ -1,7 +1,7 @@
 //
 //  PBImageStorage+ImageScaleAdditions.h
 //
-//  Created by pronebird on 10/11/13.
+//  Created by Andrej Mihajlov on 10/11/13.
 //  Copyright (c) 2013 Andrej Mihajlov. All rights reserved.
 //
 
@@ -14,5 +14,10 @@
 // Completion handler is called on main thread.
 //
 - (void)imageForKey:(NSString*)key scaledToFit:(CGSize)size completion:(void(^)(BOOL cached, UIImage* image))completion;
+
+//
+// Retrieve scaled image from memory if available, otherwise nil
+//
+- (UIImage*)imageFromMemoryForKey:(NSString*)key scaledToFit:(CGSize)size;
 
 @end
