@@ -62,6 +62,7 @@
 #endif
 }
 
+#if TARGET_OS_IPHONE
 // Clear memory cache when app enters background
 - (void)didEnterBackgroundNotification:(NSNotification*)notification {
 	[self clearMemory];
@@ -71,6 +72,7 @@
 - (void)didReceiveMemoryWarningNotification:(NSNotification*)notification {
 	[self clearMemory];
 }
+#endif
 
 - (void)setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion {
 	NSParameterAssert(key != nil && image != nil);
