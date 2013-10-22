@@ -74,7 +74,15 @@
 }
 #endif
 
+- (void)setImage:(UIImage*)image forKey:(NSString *)key diskOnly:(BOOL)diskOnly {
+	[self _setImage:image forKey:key diskOnly:diskOnly completion:nil waitUntilFinished:YES];
+}
+
 - (void)setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion {
+	[self _setImage:image forKey:key diskOnly:diskOnly completion:completion waitUntilFinished:NO];
+}
+
+- (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
 	NSParameterAssert(key != nil && image != nil);
 	
 	// save image to memory
@@ -97,14 +105,15 @@
 			return;
 		}
 		
-		[self _setImage:image forKey:key completion:^{
-			if(completion != nil) {
-				dispatch_async(dispatch_get_main_queue(), completion);
-			}
-		}];
+		[self _setImage:image forKey:key];
+		
+		if(completion != nil) {
+			dispatch_async(dispatch_get_main_queue(), completion);
+		}
 	}];
 	
-	[_ioQueue addOperation:operation];
+	
+	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
 }
 
 - (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
@@ -150,7 +159,15 @@
 	[_cache removeAllObjects];
 }
 
+- (void)clear {
+	[self _clearWithCompletion:nil waitUntilFinished:YES];
+}
+
 - (void)clearWithCompletion:(void(^)(void))completion {
+	[self _clearWithCompletion:completion waitUntilFinished:NO];
+}
+
+- (void)_clearWithCompletion:(void(^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
 	NSBlockOperation *operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
 		if(currentOperation.isCancelled) {
 			return;
@@ -167,7 +184,7 @@
 	}];
 
 	[_ioQueue cancelAllOperations];
-	[_ioQueue addOperation:operation];
+	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
 }
 
 - (NSBlockOperation*)_operationWithBlock:(void(^)(NSBlockOperation* currentOperation))block {
@@ -214,7 +231,7 @@
 	}
 }
 
-- (void)_setImage:(UIImage*)image forKey:(NSString*)key completion:(void(^)(void))completion {
+- (void)_setImage:(UIImage*)image forKey:(NSString*)key {
 	NSParameterAssert(key != nil && image != nil);
 	
 	NSData* data = UIImageJPEGRepresentation(image, 1.0f);
@@ -251,10 +268,6 @@
 	
 	// unlock file
 	[self _unlockFileHandle:handle];
-	
-	if(completion != nil) {
-		completion();
-	}
 }
 
 - (UIImage*)_imageForKey:(NSString*)key {

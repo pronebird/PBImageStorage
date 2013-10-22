@@ -35,6 +35,12 @@
 - (id)initWithNamespace:(NSString*)name basePath:(NSString*)basePath;
 
 //
+// Save image to disk only, or to memory and disk.
+// Blocks current thread execution until operation completed.
+//
+- (void)setImage:(UIImage*)image forKey:(NSString *)key diskOnly:(BOOL)diskOnly;
+
+//
 // Save image to disk only, or to memory and disk
 // Completion handler is called on main thread.
 //
@@ -61,6 +67,13 @@
 // Removes all objects from memory cache
 //
 - (void)clearMemory;
+
+//
+// Removes all objects from disk and memory
+// Blocks current thread execution until operation completed.
+//
+
+- (void)clear;
 
 //
 // Removes all objects from disk and memory
