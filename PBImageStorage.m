@@ -82,6 +82,28 @@
 	[self _setImage:image forKey:key diskOnly:diskOnly completion:completion waitUntilFinished:NO];
 }
 
+- (void)copyImageFromKey:(NSString*)fromKey toKey:(NSString*)toKey diskOnly:(BOOL)diskOnly {
+	UIImage* image = [self _imageForKey:fromKey];
+	if(image != nil) {
+		[self setImage:image forKey:toKey diskOnly:diskOnly];
+	}
+}
+
+- (void)copyImageFromKey:(NSString*)fromKey toKey:(NSString*)toKey diskOnly:(BOOL)diskOnly completion:(void(^)(void))completion {
+	// dump image to disk on background queue
+	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		if(!currentOperation.isCancelled) {
+			[self copyImageFromKey:fromKey toKey:toKey diskOnly:diskOnly];
+		}
+		
+		if(completion != nil) {
+			dispatch_async(dispatch_get_main_queue(), completion);
+		}
+	}];
+	
+	[_ioQueue addOperation:operation];
+}
+
 - (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
 	NSParameterAssert(key != nil && image != nil);
 	
@@ -156,35 +178,20 @@
 }
 
 - (void)clearMemory {
+	[_ioQueue setSuspended:YES];
 	[_cache removeAllObjects];
+	[_ioQueue setSuspended:NO];
 }
 
 - (void)clear {
-	[self _clearWithCompletion:nil waitUntilFinished:YES];
-}
-
-- (void)clearWithCompletion:(void(^)(void))completion {
-	[self _clearWithCompletion:completion waitUntilFinished:NO];
-}
-
-- (void)_clearWithCompletion:(void(^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
-	NSBlockOperation *operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
-		if(currentOperation.isCancelled) {
-			return;
-		}
-		
-		[_fileManager removeItemAtPath:_storagePath error:nil];
-		_checkStoragePathExists = YES;
-		
-		[self clearMemory];
-		
-		if(completion != nil) {
-			dispatch_async(dispatch_get_main_queue(), completion);
-		}
-	}];
-
 	[_ioQueue cancelAllOperations];
-	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
+	[_ioQueue setSuspended:YES];
+	
+	[_fileManager removeItemAtPath:_storagePath error:nil];
+	_checkStoragePathExists = YES;
+	
+	[self clearMemory];
+	[_ioQueue setSuspended:NO];
 }
 
 - (NSBlockOperation*)_operationWithBlock:(void(^)(NSBlockOperation* currentOperation))block {
@@ -239,14 +246,17 @@
 	NSError* error;
 	
 	// create cache directory if needed
-	if(_checkStoragePathExists) {
-		if(![_fileManager fileExistsAtPath:_storagePath]) {
-			if(![_fileManager createDirectoryAtPath:_storagePath withIntermediateDirectories:YES attributes:nil error:&error]) {
-				[[NSException exceptionWithName:@"IOException" reason:error.localizedFailureReason userInfo:error.userInfo] raise];
+	@synchronized(self) {
+		if(_checkStoragePathExists) {
+			BOOL isDir;
+			if(![_fileManager fileExistsAtPath:_storagePath isDirectory:&isDir]) {
+				if(![_fileManager createDirectoryAtPath:_storagePath withIntermediateDirectories:YES attributes:nil error:&error]) {
+					[[NSException exceptionWithName:@"IOException" reason:error.localizedFailureReason userInfo:error.userInfo] raise];
+				}
 			}
+			
+			_checkStoragePathExists = NO;
 		}
-		
-		_checkStoragePathExists = NO;
 	}
 	
 	// make sure file exists

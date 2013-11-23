@@ -47,6 +47,18 @@
 - (void)setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void(^)(void))completion;
 
 //
+// Copy image from one key to another
+// Blocks current thread execution until operation completed.
+//
+- (void)copyImageFromKey:(NSString*)fromKey toKey:(NSString*)toKey diskOnly:(BOOL)diskOnly;
+
+//
+// Copy image from one key to another
+// Completion handler is called on main thread.
+//
+- (void)copyImageFromKey:(NSString*)fromKey toKey:(NSString*)toKey diskOnly:(BOOL)diskOnly completion:(void(^)(void))completion;
+
+//
 // Retrieve image from memory if available, otherwise load it from
 // disk to memory and return it in completion handler
 // Completion handler is called on main thread.
@@ -74,10 +86,5 @@
 //
 
 - (void)clear;
-
-//
-// Removes all objects from disk and memory
-//
-- (void)clearWithCompletion:(void(^)(void))completion;
 
 @end
