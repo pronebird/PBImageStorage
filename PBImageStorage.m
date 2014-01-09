@@ -89,7 +89,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 		[_ioQueue setMaxConcurrentOperationCount:maxConcurrentOperations];
 		[_ioQueue setSuspended:NO];
 		
-		// add operationCount observer
+		// add observer for operationCount
 		[_ioQueue addObserver:self forKeyPath:@"operationCount" options:NSKeyValueObservingOptionNew context:kPBImageStorageOperationCountContext];
 		
 #if TARGET_OS_IPHONE
@@ -102,8 +102,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 - (void)dealloc {
 #if TARGET_OS_IPHONE
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
-	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidEnterBackgroundNotification object:nil];
-	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationWillTerminateNotification object:nil];
 #endif
 	
 	// remove observer for operationCount
