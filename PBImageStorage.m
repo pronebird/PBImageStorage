@@ -321,10 +321,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 }
 
 - (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
-	[self _setImage:image forKey:key diskOnly:diskOnly completion:completion dependentOperations:nil waitUntilFinished:waitUntilFinished];
-}
-
-- (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion dependentOperations:(NSArray*)dependentOperations waitUntilFinished:(BOOL)waitUntilFinished {
 	NSParameterAssert(key != nil && image != nil);
 	
 	// save image to memory
@@ -333,7 +329,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	}
 	
 	// dump image to disk on background queue
-	NSBlockOperation* mainOperation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
 		if(currentOperation.isCancelled) {
 			// remove object from cache if operation was cancelled
 			if(!diskOnly) {
@@ -354,18 +350,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 		}
 	}];
 	
-	// create operations array
-	NSMutableArray* operations = [NSMutableArray arrayWithObject:mainOperation];
-	
-	// add dependent operations
-	if(dependentOperations != nil) {
-		for(NSOperation* dependentOperation in dependentOperations) {
-			[dependentOperation addDependency:mainOperation];
-			[operations addObject:dependentOperation];
-		}
-	}
-	
-	[_ioQueue addOperations:operations waitUntilFinished:waitUntilFinished];
+	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
 }
 
 - (void)copyImageFromKey:(NSString*)fromKey toKey:(NSString*)toKey diskOnly:(BOOL)diskOnly {
@@ -410,7 +395,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 
 //
 // Scales original image at key, puts it in storage and returns in completion handler
-// @TODO: group multiple operations in a single batch
 //
 - (void)imageForKey:(NSString*)key scaledToFit:(CGSize)size completion:(void(^)(BOOL cached, UIImage* image))completion {
 	NSString* scaledImageKey = [self _keyForScaledImageWithKey:key size:size];
@@ -423,7 +407,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	// return if image is found in memory cache
 	if(memoryImage != nil) {
 		if(completion != nil) {
-			// no guarantee that this method is called on main thread
 			dispatch_async(dispatch_get_main_queue(), ^{
 				completion(YES, memoryImage);
 			});
@@ -431,63 +414,57 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 		return;
 	}
 	
-	// if image is not in memory, try loading it from disk
-	[self imageForKey:scaledImageKey completion:^(UIImage *diskImage) {
+	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		if(currentOperation.isCancelled) {
+			return;
+		}
+		
+		// if image is not in memory, try loading it from disk
+		UIImage* diskImage = [self _imageForKey:scaledImageKey];
 		
 		// return image if it's found on disk
 		if(diskImage != nil) {
 			if(completion != nil) {
-				completion(NO, diskImage);
+				dispatch_async(dispatch_get_main_queue(), ^{
+					completion(NO, diskImage);
+				});
 			}
 			return;
 		}
 		
-		// retrieve original image to generate a scaled copy
-		[self imageForKey:key completion:^(UIImage *originalImage) {
-			
-			// if original image lost or something really went wrong, return nil
-			if(originalImage == nil) {
-				if(completion != nil) {
+		// if scaled image is not on disk, retrieve original image to generate it
+		UIImage* originalImage = [self _imageForKey:key];
+		
+		// if original image lost or something really went wrong, return nil
+		if(originalImage == nil) {
+			if(completion != nil) {
+				dispatch_async(dispatch_get_main_queue(), ^{
 					completion(NO, nil);
-				}
-				return;
+				});
 			}
-			
-			// schedule scaling in background
-			dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-				@autoreleasepool {
-					__weak typeof(self) weakSelf = self;
-					
-					// scale image
-					UIImage* scaledImage = [self _scaleImage:originalImage toSize:size];
-					
-					// add dependency to index store
-					NSBlockOperation* dependentOperation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
-						__strong typeof(self) strongSelf = weakSelf;
-						if(strongSelf == nil) {
-							return;
-						}
-						
-						if(currentOperation.isCancelled) {
-							return;
-						}
-						
-						// add dependent key to index store
-						[strongSelf _indexStoreAddDependentKey:scaledImageKey forKey:key];
-						
-						if(completion != nil) {
-							dispatch_async(dispatch_get_main_queue(), ^{
-								completion(NO, scaledImage);
-							});
-						}
-					}];
-					
-					// save scaled image on disk and in memory
-					[self _setImage:scaledImage forKey:scaledImageKey diskOnly:NO completion:nil dependentOperations:@[ dependentOperation ] waitUntilFinished:NO];
-				}
+			return;
+		}
+		
+		// scale image
+		UIImage* scaledImage = [self _scaleImage:originalImage toSize:size];
+		
+		// save image to memory
+		[_memoryCache setObject:scaledImage	forKey:scaledImageKey];
+		
+		// add dependent key to index store
+		[self _indexStoreAddDependentKey:scaledImageKey forKey:key];
+		
+		// save scaled image on disk and in memory
+		[self _setImage:scaledImage forKey:scaledImageKey];
+		
+		if(completion != nil) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				completion(NO, scaledImage);
 			});
-		}];
+		}
 	}];
+	
+	[_ioQueue addOperation:operation];
 }
 
 - (UIImage*)imageFromMemoryForKey:(NSString*)key {
