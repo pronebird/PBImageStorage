@@ -1,18 +1,15 @@
 //
 //  PBImageStorage.h
 //
-//  Image storage that implements memory cache between app and disk.
-//  This implementation allows to store tons of images on disk and keep
-//  only specific subset in memory.
-//
-//  Images are lazy loaded in memory upon access and purged
-//  from memory on memory warning or when app goes background.
+//  Image storage with memory cache and thumbnails support.
 //
 //  Created by Andrej Mihajlov on 8/28/13.
-//  Copyright (c) 2013 Andrej Mihajlov. All rights reserved.
+//  Copyright (c) 2013-2014 Andrej Mihajlov. All rights reserved.
 //
 
 #import <Foundation/Foundation.h>
+
+extern NSString* const kPBImageStorageIOException;
 
 @interface PBImageStorage : NSObject
 
@@ -66,9 +63,20 @@
 - (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion;
 
 //
+// Scales original image at key, puts it in storage and returns it in completion handler
+// Completion handler is called on main thread.
+//
+- (void)imageForKey:(NSString*)key scaledToFit:(CGSize)size completion:(void(^)(BOOL cached, UIImage* image))completion;
+
+//
 // Retrieve image from memory if available, otherwise nil
 //
 - (UIImage*)imageFromMemoryForKey:(NSString*)key;
+
+//
+// Retrieve scaled image from memory if available, otherwise nil
+//
+- (UIImage*)imageFromMemoryForKey:(NSString*)key scaledToFit:(CGSize)size;
 
 //
 // Remove image by key from disk and memory
@@ -88,3 +96,4 @@
 - (void)clear;
 
 @end
+
