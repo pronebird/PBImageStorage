@@ -207,7 +207,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 }
 
 - (BOOL)_indexStoreHasDependentKey:(NSString*)dependentKey forKey:(NSString*)key {
-	// load store upon first access
 	[self _indexStoreLoadIfNeeded];
 	
 	return _indexStore[key] != nil && [_indexStore[key] containsObject:dependentKey];
@@ -215,20 +214,16 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 
 - (void)_indexStoreAddKey:(NSString*)key {
 	@synchronized(_indexStore) {
-		// load store upon first access
 		[self _indexStoreLoadIfNeeded];
 		
-		// set key
 		_indexStore[key] = [NSMutableArray new];
 		
-		// save index store
 		[self _indexStoreMarkDirty];
 	}
 }
 
 - (void)_indexStoreAddDependentKey:(NSString*)dependentKey forKey:(NSString*)key {
 	@synchronized(_indexStore) {
-		// load store upon first access
 		[self _indexStoreLoadIfNeeded];
 		
 		if(_indexStore[key] != nil && ![_indexStore[key] containsObject:dependentKey]) {
@@ -240,13 +235,10 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 
 - (void)_indexStoreRemoveKey:(NSString*)key {
 	@synchronized(_indexStore) {
-		// load store upon first access
 		[self _indexStoreLoadIfNeeded];
 		
-		// remove key from index store
 		[_indexStore removeObjectForKey:key];
-			
-		// save index store
+		
 		[self _indexStoreMarkDirty];
 	}
 }
