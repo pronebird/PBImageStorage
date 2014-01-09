@@ -199,15 +199,17 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 }
 
 - (BOOL)_indexStoreHasKey:(NSString*)key {
-	[self _indexStoreLoadIfNeeded];
-	
-	return _indexStore[key] != nil;
+	@synchronized(_indexStore) {
+		[self _indexStoreLoadIfNeeded];
+		return _indexStore[key] != nil;
+	}
 }
 
 - (BOOL)_indexStoreHasDependentKey:(NSString*)dependentKey forKey:(NSString*)key {
-	[self _indexStoreLoadIfNeeded];
-	
-	return _indexStore[key] != nil && [_indexStore[key] containsObject:dependentKey];
+	@synchronized(_indexStore) {
+		[self _indexStoreLoadIfNeeded];
+		return _indexStore[key] != nil && [_indexStore[key] containsObject:dependentKey];
+	}
 }
 
 - (void)_indexStoreAddKey:(NSString*)key {
