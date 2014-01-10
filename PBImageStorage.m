@@ -165,8 +165,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 
 - (void)_indexStoreLoad {
 	NSData* data = [NSData dataWithContentsOfFile:[self _indexStoreFileName]];
-	NSMutableDictionary* dictionary = nil;
-	NSError* error = nil;
+	NSMutableDictionary* dictionary;
+	NSError* error;
 	
 	if(data != nil) {
 		dictionary = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&error];
@@ -377,7 +377,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 
 - (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
 	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
-		UIImage* image = nil;
+		UIImage* image;
 		
 		if(!currentOperation.isCancelled) {
 			image = [self _imageForKey:key];
@@ -449,7 +449,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 		UIImage* scaledImage = [self _scaleImage:originalImage toSize:size];
 		
 		// save image to memory
-		[_memoryCache setObject:scaledImage	forKey:scaledImageKey];
+		[_memoryCache setObject:scaledImage forKey:scaledImageKey];
 		
 		// add dependent key to index store
 		[self _indexStoreAddDependentKey:scaledImageKey forKey:key];
