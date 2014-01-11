@@ -117,156 +117,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 }
 #endif
 
-#pragma mark - indexStore manipulation methods
-
-- (void)_indexStoreMarkDirty {
-	@synchronized(_indexStore) {
-		_indexStoreIsDirty = YES;
-	}
-}
-
-- (void)_indexStoreSave {
-	NSError* error;
-	NSData* data;
-	NSString* indexStoreFileName = [self _indexStoreFileName];
-	
-	NSLogWarn(@"%s", __PRETTY_FUNCTION__);
-	
-	@synchronized(_indexStore) {
-		data = [NSJSONSerialization dataWithJSONObject:_indexStore options:0 error:&error];
-		_indexStoreIsDirty = NO;
-	}
-		
-	if(data != nil) {
-		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-			// write indexStore copy to file
-			BOOL success = [data writeToFile:indexStoreFileName atomically:YES];
-			
-			if(success) {
-				NSLogSuccess(@"Saved storage index to file %@", [indexStoreFileName stringByAbbreviatingWithTildeInPath]);
-			} else {
-				NSLogError(@"Failed to save storage index to file %@", [indexStoreFileName stringByAbbreviatingWithTildeInPath]);
-			}
-		});
-	} else {
-		NSLogError(@"Cannot serialize indexStore. Reason: %@", error.localizedDescription);
-	}
-}
-
-- (void)_indexStoreSaveIfNeeded {
-	@synchronized(_indexStore) {
-		NSLogSuccess(@"%s", __PRETTY_FUNCTION__);
-		
-		if(_indexStoreIsDirty) {
-			[self _indexStoreSave];
-		}
-	}
-}
-
-- (void)_indexStoreLoad {
-	NSData* data = [NSData dataWithContentsOfFile:[self _indexStoreFileName]];
-	NSMutableDictionary* dictionary;
-	NSError* error;
-	
-	if(data != nil) {
-		dictionary = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&error];
-		
-		if(error != nil) {
-			NSLogError(@"Cannot deserialize indexStore. Reason: %@", error.localizedDescription);
-		}
-		
-		if([dictionary isKindOfClass:NSDictionary.class]) {
-			@synchronized(_indexStore) {
-				[_indexStore setDictionary:dictionary];
-			}
-		}
-
-		if(dictionary != nil) {
-			NSLogSuccess(@"Read storage index from file %@", [[self _indexStoreFileName] stringByAbbreviatingWithTildeInPath]);
-		} else {
-			NSLogError(@"Failed to read storage index from file %@", [[self _indexStoreFileName] stringByAbbreviatingWithTildeInPath]);
-		}
-	}
-}
-
-- (void)_indexStoreLoadIfNeeded {
-	@synchronized(_indexStore) {
-		if(!_indexHasBeenLoaded) {
-			[self _indexStoreLoad];
-			_indexHasBeenLoaded = YES;
-		}
-	}
-}
-
-- (BOOL)_indexStoreHasKey:(NSString*)key {
-	@synchronized(_indexStore) {
-		[self _indexStoreLoadIfNeeded];
-		return _indexStore[key] != nil;
-	}
-}
-
-- (BOOL)_indexStoreHasDependentKey:(NSString*)dependentKey forKey:(NSString*)key {
-	@synchronized(_indexStore) {
-		[self _indexStoreLoadIfNeeded];
-		return _indexStore[key] != nil && [_indexStore[key] containsObject:dependentKey];
-	}
-}
-
-- (void)_indexStoreAddKey:(NSString*)key {
-	@synchronized(_indexStore) {
-		[self _indexStoreLoadIfNeeded];
-		
-		_indexStore[key] = [NSMutableArray new];
-		
-		[self _indexStoreMarkDirty];
-	}
-}
-
-- (void)_indexStoreAddDependentKey:(NSString*)dependentKey forKey:(NSString*)key {
-	@synchronized(_indexStore) {
-		[self _indexStoreLoadIfNeeded];
-		
-		if(_indexStore[key] != nil && ![_indexStore[key] containsObject:dependentKey]) {
-			[_indexStore[key] addObject:dependentKey];
-			[self _indexStoreMarkDirty];
-		}
-	}
-}
-
-- (void)_indexStoreRemoveKey:(NSString*)key {
-	@synchronized(_indexStore) {
-		[self _indexStoreLoadIfNeeded];
-		
-		[_indexStore removeObjectForKey:key];
-		
-		[self _indexStoreMarkDirty];
-	}
-}
-
-- (void)_removeDependentImagesForKey:(NSString*)key {
-	@synchronized(_indexStore) {
-		if(_indexStore[key] != nil) {
-			for(NSString* subKey in _indexStore[key]) {
-				[self removeImageForKey:subKey];
-			}
-		}
-	}
-}
-
-- (void)_indexStoreClear {
-	@synchronized(_indexStore) {
-		// remove all objects from index store
-		[_indexStore removeAllObjects];
-		
-		// remove index store from disk
-		[_fileManager removeItemAtPath:[self _indexStoreFileName] error:nil];
-	}
-}
-
-- (NSString*)_indexStoreFileName {
-	return [self.storagePath stringByAppendingPathComponent:@"_indexStore.json"];
-}
-
 #pragma mark - Key-value observing
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
 	if(context == kPBImageStorageOperationCountContext) {
@@ -279,38 +129,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	}
 }
 
-
-#pragma mark - File locking helpers
-
-- (void)_lockFileHandle:(NSFileHandle*)handle {
-	struct flock lock;
-	
-	lock.l_start = 0;
-	lock.l_len = 0;
-	lock.l_pid = getpid();
-	lock.l_type = F_WRLCK;
-	lock.l_whence = SEEK_SET;
-	
-	if(fcntl(handle.fileDescriptor, F_SETLKW, &lock) == -1) {
-		NSLogError(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
-	}
-}
-
-- (void)_unlockFileHandle:(NSFileHandle*)handle {
-	struct flock lock;
-	
-	lock.l_start = 0;
-	lock.l_len = 0;
-	lock.l_pid = getpid();
-	lock.l_type = F_UNLCK;
-	lock.l_whence = SEEK_SET;
-	
-	if(fcntl(handle.fileDescriptor, F_SETLK, &lock) == -1) {
-		NSLogError(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
-	}
-}
-
-#pragma mark - imageStorage methods
+#pragma mark - Public methods
 
 - (void)setImage:(UIImage*)image forKey:(NSString *)key diskOnly:(BOOL)diskOnly {
 	[self _setImage:image forKey:key diskOnly:diskOnly completion:nil waitUntilFinished:YES];
@@ -318,39 +137,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 
 - (void)setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion {
 	[self _setImage:image forKey:key diskOnly:diskOnly completion:completion waitUntilFinished:NO];
-}
-
-- (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
-	NSParameterAssert(key != nil && image != nil);
-	
-	// save image to memory
-	if(!diskOnly) {
-		[_memoryCache setObject:image forKey:key];
-	}
-	
-	// dump image to disk on background queue
-	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
-		if(currentOperation.isCancelled) {
-			// remove object from cache if operation was cancelled
-			if(!diskOnly) {
-				[_memoryCache removeObjectForKey:key];
-			}
-			
-			if(completion != nil) {
-				dispatch_async(dispatch_get_main_queue(), completion);
-			}
-			
-			return;
-		}
-		
-		[self _setImage:image forKey:key];
-		
-		if(completion != nil) {
-			dispatch_async(dispatch_get_main_queue(), completion);
-		}
-	}];
-	
-	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
 }
 
 - (void)copyImageFromKey:(NSString*)fromKey toKey:(NSString*)toKey diskOnly:(BOOL)diskOnly {
@@ -540,6 +326,39 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	return [_storagePath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@.jpg", key, scale]];
 }
 
+- (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
+	NSParameterAssert(key != nil && image != nil);
+	
+	// save image to memory
+	if(!diskOnly) {
+		[_memoryCache setObject:image forKey:key];
+	}
+	
+	// dump image to disk on background queue
+	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		if(currentOperation.isCancelled) {
+			// remove object from cache if operation was cancelled
+			if(!diskOnly) {
+				[_memoryCache removeObjectForKey:key];
+			}
+			
+			if(completion != nil) {
+				dispatch_async(dispatch_get_main_queue(), completion);
+			}
+			
+			return;
+		}
+		
+		[self _setImage:image forKey:key];
+		
+		if(completion != nil) {
+			dispatch_async(dispatch_get_main_queue(), completion);
+		}
+	}];
+	
+	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
+}
+
 - (void)_setImage:(UIImage*)image forKey:(NSString*)key {
 	NSParameterAssert(key != nil && image != nil);
 	
@@ -660,6 +479,187 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 //
 - (NSString*)_keyForScaledImageWithKey:(NSString*)key size:(CGSize)size {
 	return [NSString stringWithFormat:@"%@-%.0fx%.0f", key, size.width, size.height];
+}
+
+#pragma mark - indexStore manipulation private methods
+
+- (void)_indexStoreMarkDirty {
+	@synchronized(_indexStore) {
+		_indexStoreIsDirty = YES;
+	}
+}
+
+- (void)_indexStoreSave {
+	NSError* error;
+	NSData* data;
+	NSString* indexStoreFileName = [self _indexStoreFileName];
+	
+	NSLogWarn(@"%s", __PRETTY_FUNCTION__);
+	
+	@synchronized(_indexStore) {
+		data = [NSJSONSerialization dataWithJSONObject:_indexStore options:0 error:&error];
+		_indexStoreIsDirty = NO;
+	}
+	
+	if(data != nil) {
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+			// write indexStore copy to file
+			BOOL success = [data writeToFile:indexStoreFileName atomically:YES];
+			
+			if(success) {
+				NSLogSuccess(@"Saved storage index to file %@", [indexStoreFileName stringByAbbreviatingWithTildeInPath]);
+			} else {
+				NSLogError(@"Failed to save storage index to file %@", [indexStoreFileName stringByAbbreviatingWithTildeInPath]);
+			}
+		});
+	} else {
+		NSLogError(@"Cannot serialize indexStore. Reason: %@", error.localizedDescription);
+	}
+}
+
+- (void)_indexStoreSaveIfNeeded {
+	@synchronized(_indexStore) {
+		NSLogSuccess(@"%s", __PRETTY_FUNCTION__);
+		
+		if(_indexStoreIsDirty) {
+			[self _indexStoreSave];
+		}
+	}
+}
+
+- (void)_indexStoreLoad {
+	NSData* data = [NSData dataWithContentsOfFile:[self _indexStoreFileName]];
+	NSMutableDictionary* dictionary;
+	NSError* error;
+	
+	if(data != nil) {
+		dictionary = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&error];
+		
+		if(error != nil) {
+			NSLogError(@"Cannot deserialize indexStore. Reason: %@", error.localizedDescription);
+		}
+		
+		if([dictionary isKindOfClass:NSDictionary.class]) {
+			@synchronized(_indexStore) {
+				[_indexStore setDictionary:dictionary];
+			}
+		}
+		
+		if(dictionary != nil) {
+			NSLogSuccess(@"Read storage index from file %@", [[self _indexStoreFileName] stringByAbbreviatingWithTildeInPath]);
+		} else {
+			NSLogError(@"Failed to read storage index from file %@", [[self _indexStoreFileName] stringByAbbreviatingWithTildeInPath]);
+		}
+	}
+}
+
+- (void)_indexStoreLoadIfNeeded {
+	@synchronized(_indexStore) {
+		if(!_indexHasBeenLoaded) {
+			[self _indexStoreLoad];
+			_indexHasBeenLoaded = YES;
+		}
+	}
+}
+
+- (BOOL)_indexStoreHasKey:(NSString*)key {
+	@synchronized(_indexStore) {
+		[self _indexStoreLoadIfNeeded];
+		return _indexStore[key] != nil;
+	}
+}
+
+- (BOOL)_indexStoreHasDependentKey:(NSString*)dependentKey forKey:(NSString*)key {
+	@synchronized(_indexStore) {
+		[self _indexStoreLoadIfNeeded];
+		return _indexStore[key] != nil && [_indexStore[key] containsObject:dependentKey];
+	}
+}
+
+- (void)_indexStoreAddKey:(NSString*)key {
+	@synchronized(_indexStore) {
+		[self _indexStoreLoadIfNeeded];
+		
+		_indexStore[key] = [NSMutableArray new];
+		
+		[self _indexStoreMarkDirty];
+	}
+}
+
+- (void)_indexStoreAddDependentKey:(NSString*)dependentKey forKey:(NSString*)key {
+	@synchronized(_indexStore) {
+		[self _indexStoreLoadIfNeeded];
+		
+		if(_indexStore[key] != nil && ![_indexStore[key] containsObject:dependentKey]) {
+			[_indexStore[key] addObject:dependentKey];
+			[self _indexStoreMarkDirty];
+		}
+	}
+}
+
+- (void)_indexStoreRemoveKey:(NSString*)key {
+	@synchronized(_indexStore) {
+		[self _indexStoreLoadIfNeeded];
+		
+		[_indexStore removeObjectForKey:key];
+		
+		[self _indexStoreMarkDirty];
+	}
+}
+
+- (void)_removeDependentImagesForKey:(NSString*)key {
+	@synchronized(_indexStore) {
+		if(_indexStore[key] != nil) {
+			for(NSString* subKey in _indexStore[key]) {
+				[self removeImageForKey:subKey];
+			}
+		}
+	}
+}
+
+- (void)_indexStoreClear {
+	@synchronized(_indexStore) {
+		// remove all objects from index store
+		[_indexStore removeAllObjects];
+		
+		// remove index store from disk
+		[_fileManager removeItemAtPath:[self _indexStoreFileName] error:nil];
+	}
+}
+
+- (NSString*)_indexStoreFileName {
+	return [self.storagePath stringByAppendingPathComponent:@"_indexStore.json"];
+}
+
+
+#pragma mark - File locking helpers
+
+- (void)_lockFileHandle:(NSFileHandle*)handle {
+	struct flock lock;
+	
+	lock.l_start = 0;
+	lock.l_len = 0;
+	lock.l_pid = getpid();
+	lock.l_type = F_WRLCK;
+	lock.l_whence = SEEK_SET;
+	
+	if(fcntl(handle.fileDescriptor, F_SETLKW, &lock) == -1) {
+		NSLogError(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
+	}
+}
+
+- (void)_unlockFileHandle:(NSFileHandle*)handle {
+	struct flock lock;
+	
+	lock.l_start = 0;
+	lock.l_len = 0;
+	lock.l_pid = getpid();
+	lock.l_type = F_UNLCK;
+	lock.l_whence = SEEK_SET;
+	
+	if(fcntl(handle.fileDescriptor, F_SETLK, &lock) == -1) {
+		NSLogError(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
+	}
 }
 
 @end
