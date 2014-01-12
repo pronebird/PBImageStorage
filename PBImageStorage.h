@@ -15,6 +15,7 @@ extern NSString* const kPBImageStorageIOException;
 
 @property (strong, readonly) NSString* namespaceName;
 @property (strong, readonly) NSString* storagePath;
+@property (assign) CGFloat compressionQuality;
 
 //
 // Initialize storage with default namespace

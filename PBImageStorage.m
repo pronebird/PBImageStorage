@@ -75,6 +75,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	NSParameterAssert(name != nil && basePath != nil);
 	
 	if(self = [super init]) {
+		_compressionQuality = 0.5f;
 		_namespaceName = name;
 		_memoryCache = [NSCache new];
 		_ioQueue = [NSOperationQueue new];
@@ -117,7 +118,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
 	if(context == kPBImageStorageOperationCountContext) {
 		NSUInteger operationCount = [change[NSKeyValueChangeNewKey] unsignedIntegerValue];
-		NSLogInfo(@"operationCount = %d", operationCount);
 		
 		if(operationCount == 0) {
 			[self _indexStoreSaveIfNeeded];
@@ -183,9 +183,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 //
 - (void)imageForKey:(NSString*)key scaledToFit:(CGSize)size completion:(void(^)(BOOL cached, UIImage* image))completion {
 	NSString* scaledImageKey = [self _keyForScaledImageWithKey:key size:size];
-	
-	NSLogSuccess(@"%s", __PRETTY_FUNCTION__);
-	
+		
 	// try getting scaled image from memory
 	UIImage* memoryImage = [self imageFromMemoryForKey:scaledImageKey];
 	
@@ -272,6 +270,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 			return;
 		}
 		
+		[_memoryCache removeObjectForKey:key];
 		[[NSFileManager defaultManager] removeItemAtPath:[self _pathForKey:key] error:nil];
 		
 		// remove dependent images first if there were any
@@ -281,7 +280,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 		[self _indexStoreRemoveKey:key];
 	}];
 	
-	[_memoryCache removeObjectForKey:key];
 	[_ioQueue addOperation:operation];
 }
 
@@ -328,24 +326,19 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 - (void)_setImage:(UIImage*)image forKey:(NSString*)key diskOnly:(BOOL)diskOnly completion:(void (^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
 	NSParameterAssert(key != nil && image != nil);
 	
-	// save image to memory
-	if(!diskOnly) {
-		[_memoryCache setObject:image forKey:key];
-	}
-	
 	// dump image to disk on background queue
 	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
 		if(currentOperation.isCancelled) {
-			// remove object from cache if operation was cancelled
-			if(!diskOnly) {
-				[_memoryCache removeObjectForKey:key];
-			}
-			
 			if(completion != nil) {
 				dispatch_async(dispatch_get_main_queue(), completion);
 			}
 			
 			return;
+		}
+		
+		// save image to memory
+		if(!diskOnly) {
+			[_memoryCache setObject:image forKey:key];
 		}
 		
 		[self _setImage:image forKey:key];
@@ -361,7 +354,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 - (void)_setImage:(UIImage*)image forKey:(NSString*)key {
 	NSParameterAssert(key != nil && image != nil);
 	
-	NSData* data = UIImageJPEGRepresentation(image, 1.0f);
+	NSData* data = UIImageJPEGRepresentation(image, _compressionQuality);
 	NSString* path = [self _pathForKey:key];
 	NSError* error;
 	
@@ -401,8 +394,10 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	
 	if(image == nil) {
 		// read image from disk
-		image = [UIImage imageWithContentsOfFile:[self _pathForKey:key]];
-		
+		NSString* path = [self _pathForKey:key];
+		NSData* data = [NSData dataWithContentsOfFile:path];
+		image = [UIImage imageWithData:data scale:[[UIScreen mainScreen] scale]];
+	
 		if(image != nil) {
 			[_memoryCache setObject:image forKey:key];
 		}
@@ -465,8 +460,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	NSData* data;
 	NSString* indexStoreFileName = [self _indexStoreFileName];
 	
-	NSLogWarn(@"%s", __PRETTY_FUNCTION__);
-	
 	@synchronized(_indexStore) {
 		data = [NSJSONSerialization dataWithJSONObject:_indexStore options:0 error:&error];
 		_indexStoreIsDirty = NO;
@@ -477,9 +470,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 			// write indexStore copy to file
 			BOOL success = [data writeToFile:indexStoreFileName atomically:YES];
 			
-			if(success) {
-				NSLogSuccess(@"Saved storage index to file %@", [indexStoreFileName stringByAbbreviatingWithTildeInPath]);
-			} else {
+			if(!success) {
 				NSLogError(@"Failed to save storage index to file %@", [indexStoreFileName stringByAbbreviatingWithTildeInPath]);
 			}
 		});
@@ -490,8 +481,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 
 - (void)_indexStoreSaveIfNeeded {
 	@synchronized(_indexStore) {
-		NSLogSuccess(@"%s", __PRETTY_FUNCTION__);
-		
 		if(_indexStoreIsDirty) {
 			[self _indexStoreSave];
 		}
@@ -517,8 +506,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 		}
 		
 		if(dictionary != nil) {
-			NSLogSuccess(@"Read storage index from file %@", [[self _indexStoreFileName] stringByAbbreviatingWithTildeInPath]);
-		} else {
 			NSLogError(@"Failed to read storage index from file %@", [[self _indexStoreFileName] stringByAbbreviatingWithTildeInPath]);
 		}
 	}
@@ -582,7 +569,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	@synchronized(_indexStore) {
 		if(_indexStore[key] != nil) {
 			for(NSString* subKey in _indexStore[key]) {
-				[self removeImageForKey:subKey];
+				[_memoryCache removeObjectForKey:subKey];
+				[[NSFileManager defaultManager] removeItemAtPath:[self _pathForKey:subKey] error:nil];
 			}
 		}
 	}
