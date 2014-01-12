@@ -67,8 +67,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 }
 
 - (id)initWithNamespace:(NSString*)name {
-	NSString* cachesDirectory = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) lastObject];
-	NSString* basePath = [cachesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"ru.codeispoetry.%@", self.class]];
+	NSString* supportDirectory = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) lastObject];
+	NSString* basePath = [supportDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"ru.codeispoetry.%@", self.class]];
 	return [self initWithNamespace:name basePath:basePath];
 }
 
