@@ -16,12 +16,13 @@ PBImageStorage* storage = [[PBImageStorage alloc] initWithNamespace:@"myStorage"
 
 // Get image from storage asynchronously
 [storage imageForKey:@"someKey" completion:^(UIImage* image) {
-	NSLog(@"Image %p has been retrieved from storage.", image);
+	NSLog(@"Image %p with size %@ has been retrieved from storage.", image, NSStringFromCGSize(image.size));
 }];
 
 // Get scaled image from storage asynchronously
 [storage imageForKey:@"someKey" scaledToFit:CGSizeMake(200, 200) completion:^(BOOL cached, UIImage* image) {
-	NSLog(@"Scaled image %p has been retrieved from storage.", image);
+	NSLog(@"Scaled image %p with size %@ has been retrieved from storage.", image, NSStringFromCGSize(image.size));
+	NSLog(@"Scaled image was cached in memory? %@", ((cached) ? @"YES" : @"NO"));
 }];
 
 // Copy image from one key to some other key asynchronously
@@ -31,13 +32,6 @@ PBImageStorage* storage = [[PBImageStorage alloc] initWithNamespace:@"myStorage"
 
 // Remove image from storage
 [storage removeImageForKey:@"someKey"];
-
-// Clear memory cache
-[storage clearMemory];
-
-// Remove everything from storage
-[storage clear];
-
 ```
 
 See [PBImageStorage.h](https://github.com/pronebird/PBImageStorage/blob/master/PBImageStorage.h) for the full list of methods.
