@@ -54,7 +54,6 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 
 @implementation PBImageStorage {
 	NSCache* _memoryCache;
-	NSFileManager* _fileManager;
 	NSOperationQueue* _ioQueue;
 	NSMutableDictionary* _indexStore;
 	BOOL _checkStoragePathExists;
@@ -76,17 +75,14 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	NSParameterAssert(name != nil && basePath != nil);
 	
 	if(self = [super init]) {
-		NSInteger maxConcurrentOperations = NSProcessInfo.processInfo.processorCount * 2;
-		
 		_namespaceName = name;
 		_memoryCache = [NSCache new];
-		_fileManager = [NSFileManager new];
 		_ioQueue = [NSOperationQueue new];
 		_indexStore = [NSMutableDictionary new];
 		_storagePath = [basePath stringByAppendingPathComponent:name];
 		_checkStoragePathExists = YES;
 		
-		[_ioQueue setMaxConcurrentOperationCount:maxConcurrentOperations];
+		[_ioQueue setMaxConcurrentOperationCount:1];
 		[_ioQueue setSuspended:NO];
 		
 		// add observer for operationCount
@@ -142,7 +138,10 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 - (void)copyImageFromKey:(NSString*)fromKey toKey:(NSString*)toKey diskOnly:(BOOL)diskOnly {
 	UIImage* image = [self _imageForKey:fromKey];
 	if(image != nil) {
-		[self setImage:image forKey:toKey diskOnly:diskOnly];
+		if(!diskOnly) {
+			[_memoryCache setObject:image forKey:toKey];
+		}
+		[self _setImage:image forKey:toKey];
 	}
 }
 
@@ -273,7 +272,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 			return;
 		}
 		
-		[_fileManager removeItemAtPath:[self _pathForKey:key] error:nil];
+		[[NSFileManager defaultManager] removeItemAtPath:[self _pathForKey:key] error:nil];
 		
 		// remove dependent images first if there were any
 		[self _removeDependentImagesForKey:key];
@@ -298,7 +297,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	
 	[self _indexStoreClear];
 	
-	[_fileManager removeItemAtPath:_storagePath error:nil];
+	[[NSFileManager defaultManager] removeItemAtPath:_storagePath error:nil];
 	_checkStoragePathExists = YES;
 	
 	[self clearMemory];
@@ -370,8 +369,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	@synchronized(self) {
 		if(_checkStoragePathExists) {
 			BOOL isDir;
-			if(![_fileManager fileExistsAtPath:_storagePath isDirectory:&isDir]) {
-				if(![_fileManager createDirectoryAtPath:_storagePath withIntermediateDirectories:YES attributes:nil error:&error]) {
+			if(![[NSFileManager defaultManager] fileExistsAtPath:_storagePath isDirectory:&isDir]) {
+				if(![[NSFileManager defaultManager] createDirectoryAtPath:_storagePath withIntermediateDirectories:YES attributes:nil error:&error]) {
 					[[NSException exceptionWithName:kPBImageStorageIOException reason:error.localizedDescription userInfo:error.userInfo] raise];
 				}
 			}
@@ -380,25 +379,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 		}
 	}
 	
-	// make sure file exists
-	[_fileManager createFileAtPath:path contents:nil attributes:nil];
-	
-	// open handle
-	NSFileHandle* handle = [NSFileHandle fileHandleForUpdatingAtPath:path];
-	
-	// check if handle is valid
-	if(handle == nil) {
-		[[NSException exceptionWithName:kPBImageStorageIOException reason:[NSString stringWithFormat:@"Invalid file handle: %@", path] userInfo:nil] raise];
-	}
-	
-	// lock file
-	[self _lockFileHandle:handle];
-	
 	// write data
-	[handle writeData:data];
-	
-	// unlock file
-	[self _unlockFileHandle:handle];
+	[data writeToFile:path atomically:YES];
 	
 	// remove dependent images first if there were any
 	[self _removeDependentImagesForKey:key];
@@ -418,19 +400,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	UIImage* image = [_memoryCache objectForKey:key];
 	
 	if(image == nil) {
-		NSFileHandle* handle = [NSFileHandle fileHandleForUpdatingAtPath:[self _pathForKey:key]];
-		
-		if(handle != nil) {
-			// lock file
-			[self _lockFileHandle:handle];
-			
-			// read image
-			NSData* data = [handle readDataToEndOfFile];
-			image = [UIImage imageWithData:data scale:UIScreen.mainScreen.scale];
-			
-			// unlock file
-			[self _unlockFileHandle:handle];
-		}
+		// read image from disk
+		image = [UIImage imageWithContentsOfFile:[self _pathForKey:key]];
 		
 		if(image != nil) {
 			[_memoryCache setObject:image forKey:key];
@@ -623,43 +594,12 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 		[_indexStore removeAllObjects];
 		
 		// remove index store from disk
-		[_fileManager removeItemAtPath:[self _indexStoreFileName] error:nil];
+		[[NSFileManager defaultManager] removeItemAtPath:[self _indexStoreFileName] error:nil];
 	}
 }
 
 - (NSString*)_indexStoreFileName {
 	return [self.storagePath stringByAppendingPathComponent:@"_indexStore.json"];
-}
-
-
-#pragma mark - File locking helpers
-
-- (void)_lockFileHandle:(NSFileHandle*)handle {
-	struct flock lock;
-	
-	lock.l_start = 0;
-	lock.l_len = 0;
-	lock.l_pid = getpid();
-	lock.l_type = F_WRLCK;
-	lock.l_whence = SEEK_SET;
-	
-	if(fcntl(handle.fileDescriptor, F_SETLKW, &lock) == -1) {
-		NSLogError(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
-	}
-}
-
-- (void)_unlockFileHandle:(NSFileHandle*)handle {
-	struct flock lock;
-	
-	lock.l_start = 0;
-	lock.l_len = 0;
-	lock.l_pid = getpid();
-	lock.l_type = F_UNLCK;
-	lock.l_whence = SEEK_SET;
-	
-	if(fcntl(handle.fileDescriptor, F_SETLK, &lock) == -1) {
-		NSLogError(@"%s error: %s", __PRETTY_FUNCTION__, strerror(errno));
-	}
 }
 
 @end
