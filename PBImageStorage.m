@@ -160,22 +160,17 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	[_ioQueue addOperation:operation];
 }
 
-- (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
-	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
-		UIImage* image;
-		
-		if(!currentOperation.isCancelled) {
-			image = [self _imageForKey:key];
-		}
-		
-		if(completion != nil) {
-			dispatch_async(dispatch_get_main_queue(), ^{
-				completion(image);
-			});
-		}
-	}];
+- (UIImage*)imageForKey:(NSString*)key {
+	__block UIImage* retImage;
+	[self _imageForKey:key completion:^(UIImage *image) {
+		retImage = image;
+	} waitUntilFinished:YES];
 	
-	[_ioQueue addOperation:operation];
+	return retImage;
+}
+
+- (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
+	[self _imageForKey:key completion:completion waitUntilFinished:NO];
 }
 
 //
@@ -382,6 +377,24 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	[self _indexStoreAddKey:key];
 }
 
+- (void)_imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion waitUntilFinished:(BOOL)waitUntilFinished {
+	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		UIImage* image;
+		
+		if(!currentOperation.isCancelled) {
+			image = [self _imageForKey:key];
+		}
+		
+		if(completion != nil) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				completion(image);
+			});
+		}
+	}];
+	
+	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
+}
+
 - (UIImage*)_imageForKey:(NSString*)key {
 	NSParameterAssert(key != nil);
 	
@@ -499,7 +512,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 			NSLogError(@"Cannot deserialize indexStore. Reason: %@", error.localizedDescription);
 		}
 		
-		if([dictionary isKindOfClass:NSDictionary.class]) {
+		if([dictionary isKindOfClass:[NSDictionary class]]) {
 			@synchronized(_indexStore) {
 				[_indexStore setDictionary:dictionary];
 			}

@@ -58,6 +58,12 @@ extern NSString* const kPBImageStorageIOException;
 
 //
 // Retrieve image from memory if available, otherwise load it from
+// disk to memory and return it synchronously
+//
+- (UIImage*)imageForKey:(NSString*)key;
+
+//
+// Retrieve image from memory if available, otherwise load it from
 // disk to memory and return it in completion handler
 // Completion handler is called on main thread.
 //
