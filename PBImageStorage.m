@@ -161,12 +161,7 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 }
 
 - (UIImage*)imageForKey:(NSString*)key {
-	__block UIImage* retImage;
-	[self _imageForKey:key completion:^(UIImage *image) {
-		retImage = image;
-	} waitUntilFinished:YES];
-	
-	return retImage;
+	return [self _imageForKey:key completion:nil waitUntilFinished:YES];
 }
 
 - (void)imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion {
@@ -257,45 +252,36 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	return [self imageFromMemoryForKey:scaledImageKey];
 }
 
+- (void)removeImageForKey:(NSString*)key completion:(void(^)(void))completion {
+	[self _removeImageForKey:key completion:completion waitUntilFinished:NO];
+}
+
 - (void)removeImageForKey:(NSString*)key {
-	NSParameterAssert(key != nil);
-	
-	NSBlockOperation *operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
-		if(currentOperation.isCancelled) {
-			return;
-		}
-		
-		[_memoryCache removeObjectForKey:key];
-		[[NSFileManager defaultManager] removeItemAtPath:[self _pathForKey:key] error:nil];
-		
-		// remove dependent images first if there were any
-		[self _removeDependentImagesForKey:key];
-		
-		// remove key from index store
-		[self _indexStoreRemoveKey:key];
-	}];
-	
-	[_ioQueue addOperation:operation];
+	[self _removeImageForKey:key completion:nil waitUntilFinished:YES];
 }
 
 - (void)clearMemory {
-	[_ioQueue setSuspended:YES];
-	[_memoryCache removeAllObjects];
-	[_ioQueue setSuspended:NO];
+	@synchronized(self) {
+		[_ioQueue setSuspended:YES];
+		[_memoryCache removeAllObjects];
+		[_ioQueue setSuspended:NO];
+	}
 }
 
 - (void)clear {
-	[_ioQueue cancelAllOperations];
-	[_ioQueue setSuspended:YES];
-	
-	[self _indexStoreClear];
-	
-	[[NSFileManager defaultManager] removeItemAtPath:_storagePath error:nil];
-	_checkStoragePathExists = YES;
-	
-	[self clearMemory];
-	
-	[_ioQueue setSuspended:NO];
+	@synchronized(self) {
+		[_ioQueue cancelAllOperations];
+		[_ioQueue setSuspended:YES];
+		
+		[self _indexStoreClear];
+		
+		[[NSFileManager defaultManager] removeItemAtPath:_storagePath error:nil];
+		_checkStoragePathExists = YES;
+		
+		[self clearMemory];
+		
+		[_ioQueue setSuspended:NO];
+	}
 }
 
 #pragma mark - Internal methods
@@ -377,10 +363,35 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	[self _indexStoreAddKey:key];
 }
 
-- (void)_imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion waitUntilFinished:(BOOL)waitUntilFinished {
-	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
-		UIImage* image;
+- (void)_removeImageForKey:(NSString*)key completion:(void(^)(void))completion waitUntilFinished:(BOOL)waitUntilFinished {
+	NSParameterAssert(key != nil);
+	
+	NSBlockOperation *operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
+		if(!currentOperation.isCancelled) {
+			[_memoryCache removeObjectForKey:key];
+			[[NSFileManager defaultManager] removeItemAtPath:[self _pathForKey:key] error:nil];
+			
+			// remove dependent images first if there were any
+			[self _removeDependentImagesForKey:key];
+			
+			// remove key from index store
+			[self _indexStoreRemoveKey:key];
+		}
 		
+		if(completion != nil) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				completion();
+			});
+		}
+	}];
+	
+	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
+}
+
+- (UIImage*)_imageForKey:(NSString*)key completion:(void(^)(UIImage* image))completion waitUntilFinished:(BOOL)waitUntilFinished {
+	__block UIImage* image;
+	
+	NSBlockOperation* operation = [self _operationWithBlock:^(NSBlockOperation *currentOperation) {
 		if(!currentOperation.isCancelled) {
 			image = [self _imageForKey:key];
 		}
@@ -393,6 +404,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 	}];
 	
 	[_ioQueue addOperations:@[ operation ] waitUntilFinished:waitUntilFinished];
+	
+	return image;
 }
 
 - (UIImage*)_imageForKey:(NSString*)key {

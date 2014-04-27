@@ -88,6 +88,11 @@ extern NSString* const kPBImageStorageIOException;
 //
 // Remove image by key from disk and memory
 //
+- (void)removeImageForKey:(NSString*)key completion:(void(^)(void))completion;
+
+//
+// Remove image by key from disk and memory synchronously
+//
 - (void)removeImageForKey:(NSString*)key;
 
 //
