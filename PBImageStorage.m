@@ -172,6 +172,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 // Scales original image at key, puts it in storage and returns in completion handler
 //
 - (void)imageForKey:(NSString*)key scaledToFit:(CGSize)size completion:(void(^)(BOOL cached, UIImage* image))completion {
+	NSParameterAssert(size.width > 0 && size.height > 0);
+	
 	NSString* scaledImageKey = [self _keyForScaledImageWithKey:key size:size];
 		
 	// try getting scaled image from memory
