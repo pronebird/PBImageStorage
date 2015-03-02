@@ -2,6 +2,14 @@
 
 Key-value image storage with memory cache, thumbnails support and on-disk persistence.
 
+## CocoaPods
+
+Drop the following line in your Podfile:
+
+```ruby
+pod 'PBImageStorage'
+```
+
 ## Usage
 
 ```objective-c
@@ -34,4 +42,7 @@ PBImageStorage* storage = [[PBImageStorage alloc] initWithNamespace:@"myStorage"
 [storage removeImageForKey:@"someKey"];
 ```
 
-See [PBImageStorage.h](https://github.com/pronebird/PBImageStorage/blob/master/PBImageStorage.h) for the full list of methods.
+## TODO
+
+- Add tests
+- Convert documentation to something apple-doc would understand
