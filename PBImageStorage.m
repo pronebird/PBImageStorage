@@ -526,10 +526,8 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 				[_indexStore setDictionary:dictionary];
 			}
 		}
-		
-		if(dictionary != nil) {
-			NSLogError(@"Failed to read storage index from file %@", [[self _indexStoreFileName] stringByAbbreviatingWithTildeInPath]);
-		}
+	} else {
+		NSLogError(@"Failed to read storage index from file %@", [[self _indexStoreFileName] stringByAbbreviatingWithTildeInPath]);
 	}
 }
 
