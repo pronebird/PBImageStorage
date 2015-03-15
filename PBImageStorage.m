@@ -439,32 +439,26 @@ static void* kPBImageStorageOperationCountContext = &kPBImageStorageOperationCou
 // Scale image to fit in provided size
 //
 - (UIImage*)_scaleImage:(UIImage*)image toSize:(CGSize)size {
-	CGFloat ratio = image.size.height / image.size.width;
-	CGFloat scaleFactor;
 	CGRect imageRect;
 	UIImage* output;
-	
-	if(ratio > 0) {
-		scaleFactor = size.height / image.size.height;
-	} else {
-		scaleFactor = size.width / image.size.width;
-	}
-	
+
+	CGFloat widthAspect = size.width / image.size.width;
+	CGFloat heightAspect = size.height / image.size.height;
+	CGFloat scaleFactor = MAX(widthAspect, heightAspect);
+
 	imageRect.size.width = image.size.width * scaleFactor;
 	imageRect.size.height = image.size.height * scaleFactor;
-	imageRect.origin.x = (size.width - imageRect.size.width) * 0.5f;
-	imageRect.origin.y = (size.height - imageRect.size.height) * 0.5f;
-	
-	UIGraphicsBeginImageContextWithOptions(size, YES, 0.0f);
-	
-	[[UIColor whiteColor] set];
-	UIRectFill(CGRectMake(0, 0, size.width, size.height));
-	
+	imageRect.origin.x = (size.width - imageRect.size.width) * 0.5;
+	imageRect.origin.y = (size.height - imageRect.size.height) * 0.5;
+	imageRect = CGRectIntegral(imageRect);
+    
+	UIGraphicsBeginImageContextWithOptions(size, YES, 0.0);
+
 	[image drawInRect:imageRect];
-	
+
 	output = UIGraphicsGetImageFromCurrentImageContext();
 	UIGraphicsEndImageContext();
-	
+
 	return output;
 }
 
